@@ -141,16 +141,7 @@ export class GraphQLGateway {
         '$services.changed': this.handleServiceUpdate,
         '$node.connected': this.handleNodeConnection,
         '$node.disconnected': this.handleNodeDisconnected,
-      },
-      actions: {
-        graphql: {
-          params: {
-            query: { type: 'string' },
-            variables: { type: 'object', optional: true }
-          },
-          handler: ctx => execute(this.schema, ctx.params.query, null, null, ctx.params.variables),
-        },
-      },
+      }
     });
   }
 

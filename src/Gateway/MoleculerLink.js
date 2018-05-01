@@ -1,31 +1,36 @@
 // @flow
-import { ApolloLink, Observable, RequestHandler } from 'apollo-link';
-import { print } from 'graphql/language/printer';
-import type { ExecutionResult } from 'graphql';
+import { ApolloLink, Observable, RequestHandler } from "apollo-link";
+import { print } from "graphql/language/printer";
+import type { ExecutionResult } from "graphql";
 
 type ServiceOptions = {
   broker: {
-    call: Function,
+    call: Function
   },
-  service: string,
+  service: string
 };
 
 function createMoleculerLink(opts: ServiceOptions): ApolloLink {
   return new ApolloLink(
     operation =>
       new Observable(observer => {
-        const { credentials, fetcherOptions, graphqlContext } = operation.getContext();
+        const {
+          credentials,
+          fetcherOptions,
+          graphqlContext
+        } = operation.getContext();
         const { operationName, extensions, variables, query } = operation;
         const { broker, service } = opts;
 
-        broker.call(`${service}.graphql`, {
-          credentials,
-          query: print(query),
-          variables,
-          extensions,
-          operationName,
-          graphqlContext
-        })
+        broker
+          .call(`${service}.graphql`, {
+            credentials,
+            query: print(query),
+            variables,
+            extensions,
+            operationName,
+            graphqlContext
+          })
           .then(result => {
             observer.next(result);
             observer.complete();
@@ -34,7 +39,7 @@ function createMoleculerLink(opts: ServiceOptions): ApolloLink {
           .catch(err => {
             observer.error(err);
           });
-      }),
+      })
   );
 }
 

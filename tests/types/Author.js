@@ -1,7 +1,7 @@
-import { createGraphqlMixin } from '../../src/createGraphqlMixin';
-import { authors } from './data';
+import { createGraphqlMixin } from "../../src/createGraphqlMixin";
+import { authors } from "./data";
 
-const schema = `
+export const schema = `
   type Author {
     id: Int,
     name: String,
@@ -37,21 +37,26 @@ const relationships = `
 
 const relationDefinitions = {
   books: {
-    type: 'query',
-    operationName: 'booksByAuthor',
+    type: "query",
+    operationName: "booksByAuthor",
     args: {
-      authorId: 'parent.id',
-    },
-  },
+      authorId: "parent.id"
+    }
+  }
 };
 
 const Query = {
   authors: () => authors,
-  author: (_, { id }) => authors.find(author => author.id === id),
+  author: (_, { id }) => authors.find(author => author.id === id)
 };
 
 const Mutation = {
-  updateAuthor(_, { id, name, clientMutationId }) {
+  updateAuthor(
+    _,
+    {
+      input: { id, name, clientMutationId }
+    }
+  ) {
     const authorIdx = authors.findIndex(author => author.id === id);
     const author = authors[authorIdx];
     if (!name) return author;
@@ -59,7 +64,7 @@ const Mutation = {
     authors[authorIdx] = author;
     return { author, clientMutationId };
   }
-}
+};
 
 const resolvers = {
   Query,
@@ -67,14 +72,13 @@ const resolvers = {
 };
 
 const authorGraphQL = createGraphqlMixin({
-  typeName: 'Author',
   schema,
   resolvers,
   relationships,
-  relationDefinitions,
+  relationDefinitions
 });
 
 export default {
-  name: 'Author',
-  mixins: [authorGraphQL],
+  name: "Author",
+  mixins: [authorGraphQL]
 };

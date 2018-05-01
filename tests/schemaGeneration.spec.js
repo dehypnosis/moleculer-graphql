@@ -1,21 +1,22 @@
-import { ServiceBroker, Transporters } from 'moleculer';
-import { printSchema } from 'graphql';
-import { GraphQLGateway } from '..';
-import authorSvc from './types/Author';
-import bookSvc from './types/Book';
-import chapterSvc from './types/chapter';
+import { ServiceBroker, Transporters } from "moleculer";
+import { printSchema } from "graphql";
+import { GraphQLGateway } from "..";
+import authorSvc from "./types/Author";
+import bookSvc from "./types/Book";
+import chapterSvc from "./types/chapter";
 
 jest.setTimeout(10000);
 
-describe('Schema Generation', () => {
-  describe('With A Single Broker', () => {
+describe("Schema Generation", () => {
+  describe("With A Single Broker", () => {
     // Globals for With a Single Broker
     let broker = null;
     let gateway = null;
 
-    beforeAll((done) => {
+    beforeAll(() => {
       broker = new ServiceBroker({
-        nodeID: 'gatewaySingle',
+        nodeID: "gatewaySingle",
+        namespace: "schemaGeneration"
       });
 
       broker.createService(authorSvc);
@@ -24,21 +25,19 @@ describe('Schema Generation', () => {
 
       broker.start();
 
-      gateway = new GraphQLGateway({
-        broker,
-      });
+      gateway = new GraphQLGateway(broker);
 
-      gateway.start().then(() => done());
+      return gateway.start();
     });
 
-    afterAll(() => broker.stop());
+    afterAll(() => gateway.stop);
 
-    test('Should generate a consistant schema', () => {
+    test("Should generate a consistant schema", () => {
       expect(printSchema(gateway.schema)).toMatchSnapshot();
     });
   });
 
-  describe('With Multiple Brokers', () => {
+  describe("With Multiple Brokers", () => {
     // Globals for With a Single Broker
     let broker = null;
     let authorBroker = null;
@@ -46,52 +45,54 @@ describe('Schema Generation', () => {
     let chapterBroker = null;
     let gateway = null;
 
-    beforeAll((done) => {
+    beforeAll(async () => {
       broker = new ServiceBroker({
-        nodeID: 'gatewayMultiple',
-        transporter: new Transporters.MQTT('mqtt://localhost:1883')
+        nodeID: "gatewayMultiple",
+        namespace: "schemaGeneration",
+        transporter: new Transporters.MQTT("mqtt://localhost:1883")
       });
 
       authorBroker = new ServiceBroker({
-        nodeID: 'author',
-        transporter: new Transporters.MQTT('mqtt://localhost:1883')
+        nodeID: "author",
+        namespace: "schemaGeneration",
+        transporter: new Transporters.MQTT("mqtt://localhost:1883")
       });
 
       bookBroker = new ServiceBroker({
-        nodeID: 'book',
-        transporter: new Transporters.MQTT('mqtt://localhost:1883')
+        nodeID: "book",
+        namespace: "schemaGeneration",
+        transporter: new Transporters.MQTT("mqtt://localhost:1883")
       });
 
       chapterBroker = new ServiceBroker({
-        nodeID: 'chapter',
-        transporter: new Transporters.MQTT('mqtt://localhost:1883')
+        nodeID: "chapter",
+        namespace: "schemaGeneration",
+        transporter: new Transporters.MQTT("mqtt://localhost:1883")
       });
 
       broker.start();
 
-      gateway = new GraphQLGateway({
-        broker,
-      });
-
-      gateway.start().then(() => done());
+      gateway = new GraphQLGateway(broker);
 
       authorBroker.createService(authorSvc);
       bookBroker.createService(bookSvc);
       chapterBroker.createService(chapterSvc);
 
-      authorBroker.start();
-      bookBroker.start();
-      chapterBroker.start();
+      await authorBroker.start();
+      await bookBroker.start();
+      await chapterBroker.start();
+      await gateway.start();
     });
 
-    afterAll(() => {
-      broker.stop();
-      authorBroker.stop();
-      bookBroker.stop();
-      chapterBroker.stop();
-    })
+    afterAll(() =>
+      Promise.all([
+        gateway.stop(),
+        authorBroker.stop(),
+        bookBroker.stop(),
+        chapterBroker.stop()
+      ]));
 
-    test('Should generate a consistant schema', () => {
+    test("Should generate a consistant schema", () => {
       expect(printSchema(gateway.schema)).toMatchSnapshot();
     });
   });

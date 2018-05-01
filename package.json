@@ -1,6 +1,6 @@
 {
   "name": "@pledgeit/moleculer-graphql",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "Everything you need to get a graphql api gateway up and running for your moleculer services",
   "scripts": {
     "prepublish": "yarn build",
@@ -16,9 +16,8 @@
   "private": false,
   "dependencies": {
     "apollo-link": "^0.7.0",
-    "graphql-tools": "^2.2.1",
+    "graphql-tools": "^2.23.1",
     "lodash": "^4.17.4",
-    "lodash.difference": "^4.5.0",
     "moleculer": "^0.11.1",
     "selectn": "^1.1.2"
   },

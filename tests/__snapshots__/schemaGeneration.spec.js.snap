@@ -25,6 +25,7 @@ type Chapter {
 
 type Mutation {
   updateAuthor(input: UpdateAuthorInput!): UpdateAuthorPayload
+  updateBook(input: UpdateBookInput!): UpdateBookPayload
 }
 
 type Query {
@@ -47,6 +48,17 @@ input UpdateAuthorInput {
 
 type UpdateAuthorPayload {
   author: Author
+  clientMutationId: Int
+}
+
+input UpdateBookInput {
+  id: Int!
+  clientMutationId: Int!
+  title: String
+}
+
+type UpdateBookPayload {
+  book: Book
   clientMutationId: Int
 }
 "
@@ -77,6 +89,7 @@ type Chapter {
 
 type Mutation {
   updateAuthor(input: UpdateAuthorInput!): UpdateAuthorPayload
+  updateBook(input: UpdateBookInput!): UpdateBookPayload
 }
 
 type Query {
@@ -99,6 +112,17 @@ input UpdateAuthorInput {
 
 type UpdateAuthorPayload {
   author: Author
+  clientMutationId: Int
+}
+
+input UpdateBookInput {
+  id: Int!
+  clientMutationId: Int!
+  title: String
+}
+
+type UpdateBookPayload {
+  book: Book
   clientMutationId: Int
 }
 "

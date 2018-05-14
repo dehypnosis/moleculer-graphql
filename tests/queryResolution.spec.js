@@ -191,7 +191,7 @@ const runSuites = (suiteName, buildQueryResolver) => {
         client: null,
       }
 
-      beforeAll(() => {
+      beforeAll(async () => {
         ref.client = new ServiceBroker({
           nodeID: 'client',
           namespace: 'queryResolution',
@@ -226,9 +226,10 @@ const runSuites = (suiteName, buildQueryResolver) => {
         ref.bookBroker.createService(bookSvc);
         ref.chapterBroker.createService(chapterSvc);
 
+        await ref.broker.start();
         ref.gateway = new GraphQLGateway(ref.broker);
 
-        return Promise.all([
+        await Promise.all([
           ref.client.start(),
           ref.authorBroker.start(),
           ref.bookBroker.start(),

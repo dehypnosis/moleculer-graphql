@@ -9,7 +9,8 @@ export const createGraphqlMixin = ({
   schema,
   resolvers,
   relationships,
-  relationDefinitions
+  relationDefinitions,
+  directiveResolvers,
 }) => ({
   settings: {
     schema,
@@ -38,7 +39,8 @@ export const createGraphqlMixin = ({
     this.resolvers = resolvers;
     this.graphqlSchema = makeExecutableSchema({
       typeDefs: [schema],
-      resolvers
+      resolvers,
+      directiveResolvers,
     });
   },
   started() {
@@ -48,7 +50,8 @@ export const createGraphqlMixin = ({
           schema,
           serviceName: this.name,
           relationships,
-          relationDefinitions
+          relationDefinitions,
+          directiveResolvers,
         }),
       1000
     );
@@ -58,7 +61,8 @@ export const createGraphqlMixin = ({
       schema,
       serviceName: this.name,
       relationships,
-      relationDefinitions
+      relationDefinitions,
+      directiveResolvers,
     });
   }
 });

@@ -11,6 +11,7 @@ export const createGraphqlMixin = ({
   relationships,
   relationDefinitions,
   directiveResolvers,
+  schemaDirectives,
 }) => ({
   settings: {
     schema,

@@ -41,7 +41,7 @@ type RelationshipSchemas = {
 };
 
 type GraphQLTypeServiceMap = {
-  [type: GraphQLTypeName]: ServiceName
+  [type: GraphQLTypeName]: ServiceName,
 };
 
 export class GraphQLGateway {
@@ -76,7 +76,7 @@ export class GraphQLGateway {
   // Interval in milliseconds to poll for expectedTypes
   waitInterval: number = 100;
 
-  handleServiceUpdate = async(opts): Promise<void> => {
+  handleServiceUpdate = async (opts): Promise<void> => {
     const services = this.broker.services
       .filter(service => service.settings.hasGraphQLSchema)
       .filter(service => !this.blacklist.includes(service.name))
@@ -97,9 +97,10 @@ export class GraphQLGateway {
   // When nodes connect we scan their services for schemas and add stitch them in
   handleNodeConnection = async ({ node }: Object): Promise<void> => {
     const services = node.services.filter(
-      service => !this.discoveredTypes[service.settings.typeName]
-        && !this.blacklist.includes(service.name)
-        && service.settings.hasGraphQLSchema
+      service =>
+        !this.discoveredTypes[service.settings.typeName] &&
+        !this.blacklist.includes(service.name) &&
+        service.settings.hasGraphQLSchema,
     );
     if (services.length > 0) {
       for (const service of services) {
@@ -115,9 +116,7 @@ export class GraphQLGateway {
 
   // When nodes disconnect we scan their services for schemas and remove them
   handleNodeDisconnected = async ({ node }: Object): Promise<void> => {
-    const services = node.services.filter(
-      service => this.remoteSchemas[service.settings.typeName]
-    );
+    const services = node.services.filter(service => this.remoteSchemas[service.settings.typeName]);
     if (services.length > 0) {
       for (const service of services) {
         await this.buildRemoteSchema(service);
@@ -138,15 +137,15 @@ export class GraphQLGateway {
     this.service = this.broker.createService({
       name: 'gateway',
       events: {
-        '$services.changed': this.handleServiceUpdate,
-        '$node.connected': this.handleNodeConnection,
         '$node.disconnected': this.handleNodeDisconnected,
+        'graphqlService.connected': this.handleServiceUpdate,
+        'graphqlService.disconnected': this.handleNodeDisconnected,
       },
       actions: {
         graphql: {
           params: {
             query: { type: 'string' },
-            variables: { type: 'object', optional: true }
+            variables: { type: 'object', optional: true },
           },
           handler: ctx => execute(this.schema, ctx.params.query, null, null, ctx.params.variables),
         },
@@ -161,7 +160,7 @@ export class GraphQLGateway {
     const ordered = Object.keys(fields).sort();
     if (JSON.stringify(unordered) !== JSON.stringify(ordered)) {
       const alphabetized = {};
-      ordered.forEach((field) => {
+      ordered.forEach(field => {
         alphabetized[field] = fields[field];
       });
       queryType._fields = alphabetized;
@@ -171,11 +170,13 @@ export class GraphQLGateway {
   }
 
   async buildRemoteSchema(service: ServiceWorker): Promise<void> {
-    const { settings: { typeName, relationships, relationDefinitions } } = service;
+    const {
+      settings: { typeName, relationships, relationDefinitions },
+    } = service;
     if (!this.remoteSchemas[typeName]) {
       this.remoteSchemas[typeName] = await createRemoteSchema({
         broker: this.broker,
-        service
+        service,
       });
       if (relationships) {
         this.relationships[typeName] = relationships;

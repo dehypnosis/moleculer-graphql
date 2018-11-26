@@ -1,5 +1,5 @@
 {
-  "name": "moleculer-graphql",
+  "name": "@midujs/moleculer-graphql",
   "version": "0.0.1",
   "description": "Everything you need to get a graphql api gateway up and running for your moleculer services",
   "scripts": {
@@ -11,9 +11,6 @@
     "test": "yarn build && docker-compose up -d mqtt && sleep 5 && jest"
   },
   "main": "lib/index.js",
-  "author": "Brad Decker",
-  "license": "GPL-3.0",
-  "private": false,
   "dependencies": {
     "apollo-link": "^0.7.0",
     "graphql-tools": "^2.2.1",

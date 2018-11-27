@@ -96,6 +96,9 @@ export class GraphQLGateway {
 
   // When nodes connect we scan their services for schemas and add stitch them in
   handleNodeConnection = async ({ node }: Object): Promise<void> => {
+    if (!node) {
+      return;
+    }
     const services = node.services.filter(
       service =>
         !this.discoveredTypes[service.settings.typeName] &&

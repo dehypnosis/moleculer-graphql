@@ -119,6 +119,9 @@ export class GraphQLGateway {
 
   // When nodes disconnect we scan their services for schemas and remove them
   handleNodeDisconnected = async ({ node }: Object): Promise<void> => {
+    if (!node) {
+      return;
+    }
     const services = node.services.filter(service => this.remoteSchemas[service.settings.typeName]);
     if (services.length > 0) {
       for (const service of services) {

@@ -143,6 +143,8 @@ export class GraphQLGateway {
     this.service = this.broker.createService({
       name: 'gateway',
       events: {
+        '$services.changed': this.handleServiceUpdate,
+        '$node.connected': this.handleNodeConnection,
         '$node.disconnected': this.handleNodeDisconnected,
         'graphqlService.connected': this.handleServiceUpdate,
         'graphqlService.disconnected': this.handleNodeDisconnected,

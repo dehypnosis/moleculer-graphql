@@ -29,19 +29,19 @@ type GatewayOptions = {
   waitInterval?: number,
   blacklist?: Array<string>,
   generateSnapshot?: boolean,
-  snapshotPath?: string,
+  snapshotPath?: string
 };
 
 type RemoteSchemaMap = {
-  [TypeName: string]: GraphQLSchema,
+  [TypeName: string]: GraphQLSchema
 };
 
 type RelationshipSchemas = {
-  [TypeName: string]: string,
+  [TypeName: string]: string
 };
 
 type GraphQLTypeServiceMap = {
-  [type: GraphQLTypeName]: ServiceName,
+  [type: GraphQLTypeName]: ServiceName
 };
 
 export class GraphQLGateway {
@@ -103,7 +103,7 @@ export class GraphQLGateway {
       service =>
         !this.discoveredTypes[service.settings.typeName] &&
         !this.blacklist.includes(service.name) &&
-        service.settings.hasGraphQLSchema,
+        service.settings.hasGraphQLSchema
     );
     if (services.length > 0) {
       for (const service of services) {
@@ -122,7 +122,9 @@ export class GraphQLGateway {
     if (!node) {
       return;
     }
-    const services = node.services.filter(service => this.remoteSchemas[service.settings.typeName]);
+    const services = node.services.filter(
+      service => this.remoteSchemas[service.settings.typeName]
+    );
     if (services.length > 0) {
       for (const service of services) {
         await this.buildRemoteSchema(service);
@@ -139,25 +141,33 @@ export class GraphQLGateway {
     if (opts.blacklist) this.blacklist.concat(opts.blacklist);
     if (opts.generateSnapshot) this.generateSnapshot = opts.generateSnapshot;
     if (opts.snapshotPath) this.snapshotPath = opts.snapshotPath;
-    if (opts.onServiceDiscovery) this.onServiceDiscovery = opts.onServiceDiscovery;
+    if (opts.onServiceDiscovery)
+      this.onServiceDiscovery = opts.onServiceDiscovery;
     this.service = this.broker.createService({
       name: 'gateway',
       events: {
-        '$services.changed': this.handleServiceUpdate,
+        // '$services.changed': this.handleServiceUpdate,
         '$node.connected': this.handleNodeConnection,
         '$node.disconnected': this.handleNodeDisconnected,
         'graphqlService.connected': this.handleServiceUpdate,
-        'graphqlService.disconnected': this.handleNodeDisconnected,
+        'graphqlService.disconnected': this.handleNodeDisconnected
       },
       actions: {
         graphql: {
           params: {
             query: { type: 'string' },
-            variables: { type: 'object', optional: true },
+            variables: { type: 'object', optional: true }
           },
-          handler: ctx => execute(this.schema, ctx.params.query, null, null, ctx.params.variables),
-        },
-      },
+          handler: ctx =>
+            execute(
+              this.schema,
+              ctx.params.query,
+              null,
+              null,
+              ctx.params.variables
+            )
+        }
+      }
     });
   }
 
@@ -179,12 +189,12 @@ export class GraphQLGateway {
 
   async buildRemoteSchema(service: ServiceWorker): Promise<void> {
     const {
-      settings: { typeName, relationships, relationDefinitions },
+      settings: { typeName, relationships, relationDefinitions }
     } = service;
     if (!this.remoteSchemas[typeName]) {
       this.remoteSchemas[typeName] = await createRemoteSchema({
         broker: this.broker,
-        service,
+        service
       });
       if (relationships) {
         this.relationships[typeName] = relationships;
@@ -197,11 +207,13 @@ export class GraphQLGateway {
   }
 
   generateSchema(): GraphQLSchema {
-    const schemas = Object.values(this.remoteSchemas).concat(Object.values(this.relationships));
+    const schemas = Object.values(this.remoteSchemas).concat(
+      Object.values(this.relationships)
+    );
     const resolvers = buildRelationalResolvers(this.relationDefinitions);
     this.schema = mergeSchemas({
       schemas,
-      resolvers,
+      resolvers
     });
     this.schema = this.alphabetizeSchema(this.schema);
     if (this.generateSnapshot) this.recordSnapshot();
@@ -232,7 +244,9 @@ export class GraphQLGateway {
         if (discoveredTypes.some(type => !this.remoteSchemas[type])) return;
         if (undiscovered.length > 0) {
           if (this.broker.logger) {
-            const msg = `Still waiting for ${undiscovered.join(', ')} types to be discovered`;
+            const msg = `Still waiting for ${undiscovered.join(
+              ', '
+            )} types to be discovered`;
             this.broker.logger.warn(msg);
           }
           return;

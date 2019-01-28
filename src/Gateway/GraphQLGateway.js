@@ -29,19 +29,23 @@ type GatewayOptions = {
   waitInterval?: number,
   blacklist?: Array<string>,
   generateSnapshot?: boolean,
-  snapshotPath?: string
+  snapshotPath?: string,
 };
 
 type RemoteSchemaMap = {
-  [TypeName: string]: GraphQLSchema
+  [TypeName: string]: GraphQLSchema,
 };
 
 type RelationshipSchemas = {
-  [TypeName: string]: string
+  [TypeName: string]: string,
 };
 
 type GraphQLTypeServiceMap = {
-  [type: GraphQLTypeName]: ServiceName
+  [type: GraphQLTypeName]: ServiceName,
+};
+
+type HashMapRegisteredService = {
+  [key: string]: boolean,
 };
 
 export class GraphQLGateway {
@@ -75,56 +79,58 @@ export class GraphQLGateway {
   waitTimeout: number = 5000;
   // Interval in milliseconds to poll for expectedTypes
   waitInterval: number = 100;
+  // Keep track on which service registered
+  registeredServices: HashMapRegisteredService = {};
 
-  handleServiceUpdate = async (opts): Promise<void> => {
-    const services = this.broker.services
-      .filter(service => service.settings.hasGraphQLSchema)
-      .filter(service => !this.blacklist.includes(service.name))
-      .filter(service => !this.discoveredTypes[service.settings.typeName]);
+  discover = async services => {
+    const shouldBuildSchemaServices = services.filter(service => {
+      const typeName = service.settings.typeName;
+      return (
+        this.registeredServices[typeName] && // Registered
+        !this.discoveredTypes[typeName] && // Undiscovered
+        !this.blacklist.includes(service.name) && // In WhiteList
+        service.settings.hasGraphQLSchema // Has Gql Schema
+      );
+    });
 
-    if (services.length > 0) {
-      for (const service of services) {
-        this.discoveredTypes[service.settings.typeName] = service.name;
-        await this.buildRemoteSchema(service);
+    await Promise.all(
+      shouldBuildSchemaServices.map(service => {
+        const typeName = service.settings.typeName;
+
         if (this.onServiceDiscovery) {
           this.onServiceDiscovery(service);
         }
-      }
-      this.generateSchema();
-    }
+
+        return this.buildRemoteSchema(service)
+          .then(() => (this.discoveredTypes[typeName] = service.name))
+          .catch(() => {});
+      }),
+    );
+
+    return this.generateSchema();
+  };
+
+  handleServiceUpdate = (opts): Promise<void> => {
+    const services = this.broker.services;
+    return this.discover(services);
   };
 
   // When nodes connect we scan their services for schemas and add stitch them in
-  handleNodeConnection = async ({ node }: Object): Promise<void> => {
+  handleNodeConnection = ({ node }: Object): Promise<void> => {
     if (!node) {
       return;
     }
-    const services = node.services.filter(
-      service =>
-        !this.discoveredTypes[service.settings.typeName] &&
-        !this.blacklist.includes(service.name) &&
-        service.settings.hasGraphQLSchema
-    );
-    if (services.length > 0) {
-      for (const service of services) {
-        this.discoveredTypes[service.settings.typeName] = service.name;
-        await this.buildRemoteSchema(service);
-        if (this.onServiceDiscovery) {
-          this.onServiceDiscovery(service);
-        }
-      }
-      this.generateSchema();
-    }
+    const services = node.services;
+    return this.discover(services);
   };
 
   // When nodes disconnect we scan their services for schemas and remove them
   handleNodeDisconnected = async ({ node }: Object): Promise<void> => {
+    // TODO: Unclear logic
     if (!node) {
       return;
     }
-    const services = node.services.filter(
-      service => this.remoteSchemas[service.settings.typeName]
-    );
+    const services = node.services.filter(service => this.remoteSchemas[service.settings.typeName]);
     if (services.length > 0) {
       for (const service of services) {
         await this.buildRemoteSchema(service);
@@ -141,33 +147,38 @@ export class GraphQLGateway {
     if (opts.blacklist) this.blacklist.concat(opts.blacklist);
     if (opts.generateSnapshot) this.generateSnapshot = opts.generateSnapshot;
     if (opts.snapshotPath) this.snapshotPath = opts.snapshotPath;
-    if (opts.onServiceDiscovery)
-      this.onServiceDiscovery = opts.onServiceDiscovery;
+    if (opts.onServiceDiscovery) this.onServiceDiscovery = opts.onServiceDiscovery;
+
+    // * Gateway FAIL to call 'xService.graphql' when service unregistered
+    // * It's much better only call 'xService.graphql' on registered service
+    const Gateway = this;
+    this.broker.middlewares.add({
+      serviceStarted(service) {
+        const typeName = service.settings && service.settings.typeName;
+        typeName && (Gateway.registeredServices[typeName] = true);
+      },
+    });
+
+    // * Run @gateway service listening to 'internal' events to build schema
     this.service = this.broker.createService({
-      name: 'gateway',
+      name: '@gateway',
       events: {
-        // '$services.changed': this.handleServiceUpdate,
+        '$services.changed': this.handleServiceUpdate,
         '$node.connected': this.handleNodeConnection,
         '$node.disconnected': this.handleNodeDisconnected,
-        'graphqlService.connected': this.handleServiceUpdate,
-        'graphqlService.disconnected': this.handleNodeDisconnected
+        // * We dont use these event anymore
+        // 'graphqlService.connected': this.handleServiceUpdate,
+        // 'graphqlService.disconnected': this.handleNodeDisconnected,
       },
       actions: {
         graphql: {
           params: {
             query: { type: 'string' },
-            variables: { type: 'object', optional: true }
+            variables: { type: 'object', optional: true },
           },
-          handler: ctx =>
-            execute(
-              this.schema,
-              ctx.params.query,
-              null,
-              null,
-              ctx.params.variables
-            )
-        }
-      }
+          handler: ctx => execute(this.schema, ctx.params.query, null, null, ctx.params.variables),
+        },
+      },
     });
   }
 
@@ -189,12 +200,12 @@ export class GraphQLGateway {
 
   async buildRemoteSchema(service: ServiceWorker): Promise<void> {
     const {
-      settings: { typeName, relationships, relationDefinitions }
+      settings: { typeName, relationships, relationDefinitions },
     } = service;
     if (!this.remoteSchemas[typeName]) {
       this.remoteSchemas[typeName] = await createRemoteSchema({
         broker: this.broker,
-        service
+        service,
       });
       if (relationships) {
         this.relationships[typeName] = relationships;
@@ -207,13 +218,11 @@ export class GraphQLGateway {
   }
 
   generateSchema(): GraphQLSchema {
-    const schemas = Object.values(this.remoteSchemas).concat(
-      Object.values(this.relationships)
-    );
+    const schemas = Object.values(this.remoteSchemas).concat(Object.values(this.relationships));
     const resolvers = buildRelationalResolvers(this.relationDefinitions);
     this.schema = mergeSchemas({
       schemas,
-      resolvers
+      resolvers,
     });
     this.schema = this.alphabetizeSchema(this.schema);
     if (this.generateSnapshot) this.recordSnapshot();
@@ -244,9 +253,7 @@ export class GraphQLGateway {
         if (discoveredTypes.some(type => !this.remoteSchemas[type])) return;
         if (undiscovered.length > 0) {
           if (this.broker.logger) {
-            const msg = `Still waiting for ${undiscovered.join(
-              ', '
-            )} types to be discovered`;
+            const msg = `Still waiting for ${undiscovered.join(', ')} types to be discovered`;
             this.broker.logger.warn(msg);
           }
           return;

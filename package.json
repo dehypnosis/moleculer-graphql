@@ -1,6 +1,6 @@
 {
   "name": "@midujs/moleculer-graphql",
-  "version": "0.0.9",
+  "version": "0.0.12",
   "description": "Everything you need to get a graphql api gateway up and running for your moleculer services",
   "scripts": {
     "prepublish": "yarn build",
@@ -13,7 +13,7 @@
   "main": "lib/index.js",
   "dependencies": {
     "apollo-link": "^0.7.0",
-    "graphql-tools": "^2.2.1",
+    "graphql-tools": "^4.0.4",
     "lodash": "^4.17.4",
     "lodash.difference": "^4.5.0",
     "moleculer": "^0.11.1",

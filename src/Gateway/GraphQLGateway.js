@@ -80,39 +80,27 @@ export class GraphQLGateway {
   // Interval in milliseconds to poll for expectedTypes
   waitInterval: number = 100;
   // Keep track on which service registered
-  registeredServices: HashMapRegisteredService = {};
 
   discover = async services => {
-    const shouldBuildSchemaServices = services.filter(service => {
-      const typeName = service.settings.typeName;
-      return (
-        this.registeredServices[typeName] && // Registered
-        !this.discoveredTypes[typeName] && // Undiscovered
-        !this.blacklist.includes(service.name) && // In WhiteList
-        service.settings.hasGraphQLSchema // Has Gql Schema
-      );
-    });
+    const shouldBuildSchemaServices = services.filter(
+      service => !this.blacklist.includes(service.name) && service.settings.hasGraphQLSchema,
+    );
 
     await Promise.all(
       shouldBuildSchemaServices.map(service => {
-        const typeName = service.settings.typeName;
-
         if (this.onServiceDiscovery) {
           this.onServiceDiscovery(service);
         }
 
-        return this.buildRemoteSchema(service)
-          .then(() => (this.discoveredTypes[typeName] = service.name))
-          .catch(() => {});
+        return this.buildRemoteSchema(service).catch(() => {});
       }),
     );
 
     return this.generateSchema();
   };
 
-  handleServiceUpdate = (opts): Promise<void> => {
-    const services = this.broker.services;
-    return this.discover(services);
+  handleServiceUpdate = (): Promise<void> => {
+    return this.broker.call('$node.services').then(this.discover);
   };
 
   // When nodes connect we scan their services for schemas and add stitch them in
@@ -120,8 +108,8 @@ export class GraphQLGateway {
     if (!node) {
       return;
     }
-    const services = node.services;
-    return this.discover(services);
+
+    return this.discover(node.services);
   };
 
   // When nodes disconnect we scan their services for schemas and remove them
@@ -149,26 +137,12 @@ export class GraphQLGateway {
     if (opts.snapshotPath) this.snapshotPath = opts.snapshotPath;
     if (opts.onServiceDiscovery) this.onServiceDiscovery = opts.onServiceDiscovery;
 
-    // * Gateway FAIL to call 'xService.graphql' when service unregistered
-    // * It's much better only call 'xService.graphql' on registered service
-    const Gateway = this;
-    this.broker.middlewares.add({
-      serviceStarted(service) {
-        const typeName = service.settings && service.settings.typeName;
-        typeName && (Gateway.registeredServices[typeName] = true);
-      },
-    });
-
-    // * Run @gateway service listening to 'internal' events to build schema
     this.service = this.broker.createService({
       name: '@gateway',
       events: {
         '$services.changed': this.handleServiceUpdate,
         '$node.connected': this.handleNodeConnection,
         '$node.disconnected': this.handleNodeDisconnected,
-        // * We dont use these event anymore
-        // 'graphqlService.connected': this.handleServiceUpdate,
-        // 'graphqlService.disconnected': this.handleNodeDisconnected,
       },
       actions: {
         graphql: {

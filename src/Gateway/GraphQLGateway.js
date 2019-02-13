@@ -176,7 +176,11 @@ export class GraphQLGateway {
     const {
       settings: { typeName, relationships, relationDefinitions },
     } = service;
-    if (!this.remoteSchemas[typeName]) {
+
+    // const shouldBuild = !this.remoteSchemas[typeName];
+    const shouldBuild = true;
+
+    if (shouldBuild) {
       this.remoteSchemas[typeName] = await createRemoteSchema({
         broker: this.broker,
         service,

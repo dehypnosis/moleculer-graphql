@@ -75,6 +75,8 @@ GraphQLSchema {
     "String": "String",
     "UpdateAuthorInput": "UpdateAuthorInput",
     "UpdateAuthorPayload": "UpdateAuthorPayload",
+    "UpdateBookInput": "UpdateBookInput",
+    "UpdateBookPayload": "UpdateBookPayload",
     "__Directive": "__Directive",
     "__DirectiveLocation": "__DirectiveLocation",
     "__EnumValue": "__EnumValue",

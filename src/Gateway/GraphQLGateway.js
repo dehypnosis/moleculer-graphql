@@ -7,24 +7,24 @@
  * using the graphql mixin also provided by this library.
  * @flow
  */
-import { mergeSchemas } from 'graphql-tools';
-import { printSchema, parse, graphql as execute } from 'graphql';
-import difference from 'lodash.difference';
-import selectn from 'selectn';
 import fs from 'fs';
-import { createRemoteSchema } from './createRemoteSchema';
-import { buildRelationalResolvers } from './buildRelationalResolvers';
-import { getRelatedTypes } from './utilities';
-
+import selectn from 'selectn';
+import isEmpty from 'lodash.isempty';
+import difference from 'lodash.difference';
+import { mergeSchemas } from 'graphql-tools';
 import type { GraphQLSchema, DocumentNode } from 'graphql';
 import type { ServiceBroker, ServiceWorker } from 'moleculer';
+import { printSchema, parse, graphql as execute, buildSchema } from 'graphql';
+
+import { getRelatedTypes } from './utilities';
+import { createRemoteSchema } from './createRemoteSchema';
+import { buildRelationalResolvers } from './buildRelationalResolvers';
 import type { TypeRelationDefinitions } from '../Types/ServiceConfiguration';
 
 opaque type ServiceName = string;
 
 type GatewayOptions = {
   broker: ServiceBroker,
-  expectedTypes?: Array<string>,
   waitTimeout?: number,
   waitInterval?: number,
   blacklist?: Array<string>,
@@ -56,14 +56,11 @@ export class GraphQLGateway {
   // Running list of discovered types and the service that they belong to
   discoveredTypes: GraphQLTypeServiceMap = {};
   // Define absolutely necessary types before schema can be complete
-  expectedTypes: Array<string> = [];
   // If true, save a snapshot schema file everytime the schema changes
   generateSnapshot: boolean = false;
   // Boolean to track whether the schema has been initialized
   initialized: boolean = false;
   // Method to hook into service discovery.
-  onServiceDiscovery: (service: ServiceWorker) => void;
-  // All relationship resolver definitions in the remote schemas
   relationDefinitions: TypeRelationDefinitions = {};
   // Additional Schemas for relating objects across services
   relationships: RelationshipSchemas = {};
@@ -75,11 +72,16 @@ export class GraphQLGateway {
   service: ?ServiceWorker = null;
   // Path to save the snapshot to
   snapshotPath: string = `${process.cwd()}/schema.snapshot.graphql`;
-  // Length of time in milliseconds to wait for expectedTypes
-  waitTimeout: number = 5000;
-  // Interval in milliseconds to poll for expectedTypes
-  waitInterval: number = 100;
   // Keep track on which service registered
+
+  logServices = (services: Array<any>): void => {
+    console.log('[moleculer-graphql] Services:', services.map(s => s.name));
+  };
+
+  logEvent = (eventName: string) => (func: any) => {
+    console.log('[moleculer-graphql] Event', eventName);
+    return func;
+  };
 
   getGqlServices = (services: Array<any>): Array<any> =>
     services.filter(service => {
@@ -90,11 +92,17 @@ export class GraphQLGateway {
     });
 
   addGql = async (services: Array<any>): Promise<void> => {
+    console.log('[moleculer-graphql] Add GQL');
+    this.logServices(this.getGqlServices(services));
+
     this.getGqlServices(services).map(service => this.buildRemoteSchema(service));
     this.generateSchema();
   };
 
   removeGql = (services: any): void => {
+    console.log('[moleculer-graphql] Remove GQL');
+    this.logServices(services);
+
     services.map(service => this.removeRemoteSchema(service));
     this.generateSchema();
   };
@@ -115,19 +123,22 @@ export class GraphQLGateway {
     return this.broker.call('$node.services').then(this.addGql);
   };
 
+  scanAllServices = (): Promise<void> => {
+    return this.broker.call('$node.services').then(this.addGql);
+  };
+
   handleNodeConnection = ({ node }: Object): Promise<void> => {
     if (!node) {
-      console.log('[gateway][handleNodeConnection] node: empty');
+      console.log('[moleculer-graphql][handleNodeConnection] node: empty');
       return Promise.resolve();
     }
 
     return this.addGql(node.services);
   };
 
-  // When nodes disconnect we scan their services for schemas and remove them
   handleNodeDisconnected = async ({ node }: Object): Promise<void> => {
     if (!node) {
-      console.log('[gateway][handleNodeDisconnected] node: empty');
+      console.log('[moleculer-graphql][handleNodeDisconnected] node: empty');
       return Promise.resolve();
     }
 
@@ -136,26 +147,21 @@ export class GraphQLGateway {
 
   constructor(opts: GatewayOptions) {
     this.broker = opts.broker;
-    if (opts.expectedTypes) this.expectedTypes = opts.expectedTypes;
-    if (opts.waitInterval) this.waitInterval = opts.waitInterval;
-    if (opts.waitTimeout) this.waitTimeout = opts.waitTimeout;
     if (opts.blacklist) this.blacklist.concat(opts.blacklist);
     if (opts.generateSnapshot) this.generateSnapshot = opts.generateSnapshot;
     if (opts.snapshotPath) this.snapshotPath = opts.snapshotPath;
-    if (opts.onServiceDiscovery) this.onServiceDiscovery = opts.onServiceDiscovery;
 
     this.service = this.broker.createService({
       name: '@gateway',
       events: {
-        '$gql.added': this.handleGqlAdded,
-        '$gql.removed': this.handleGqlRemoved,
+        '$gql.added': this.logEvent('$gql.added')(this.handleGqlAdded),
+        '$gql.removed': this.logEvent('$gql.removed')(this.handleGqlRemoved),
 
         // * Event "$services.changed" thrown when broker load service
         // * We can't trust in this hook to merge schema
         // '$services.changed': this.handleServiceUpdate,
-        '$node.connected': this.handleNodeConnection,
-        '$node.disconnected': this.handleNodeDisconnected,
-        '$node.disconnected': this.handleNodeDisconnected,
+        '$node.connected': this.logEvent('$node.connected')(this.handleNodeConnection),
+        '$node.disconnected': this.logEvent('$node.disconnected')(this.handleNodeDisconnected),
       },
       actions: {
         graphql: {
@@ -167,6 +173,32 @@ export class GraphQLGateway {
         },
       },
     });
+  }
+
+  removeRemoteSchema(service: ServiceWorker): void {
+    const {
+      settings: { typeName, relationships, relationDefinitions },
+    } = service;
+
+    delete this.remoteSchemas[typeName];
+
+    if (relationships) {
+      delete this.relationships[typeName];
+      delete this.relationDefinitions[typeName];
+    }
+  }
+
+  buildRemoteSchema(service: ServiceWorker): void {
+    const {
+      settings: { typeName, schema, relationships, relationDefinitions },
+    } = service;
+
+    this.remoteSchemas[typeName] = schema;
+
+    if (relationships) {
+      this.relationships[typeName] = relationships;
+      this.relationDefinitions[typeName] = relationDefinitions;
+    }
   }
 
   alphabetizeSchema(schema: GraphQLSchema): GraphQLSchema {
@@ -185,49 +217,21 @@ export class GraphQLGateway {
     return schema;
   }
 
-  removeRemoteSchema(service: ServiceWorker): void {
-    const {
-      settings: { typeName, relationships, relationDefinitions },
-    } = service;
-
-    delete this.remoteSchemas[typeName];
-
-    if (relationships) {
-      delete this.relationships[typeName];
-      delete this.relationDefinitions[typeName];
-
-      // TODO: Revert expected types. Now we don't use this logic in app
-      const relatedTypes = getRelatedTypes(parse(relationships));
-      const missingTypes = difference(relatedTypes, this.discoveredTypes);
-      this.expectedTypes = this.expectedTypes.concat(missingTypes);
+  generateSchema(): GraphQLSchema | void {
+    if (isEmpty(this.remoteSchemas)) {
+      console.log('[moleculer-graphql] remoteSchemas: empty');
+      return;
     }
-  }
 
-  buildRemoteSchema(service: ServiceWorker): void {
-    const {
-      settings: { typeName, schema, relationships, relationDefinitions },
-    } = service;
-
-    this.remoteSchemas[typeName] = schema;
-
-    if (relationships) {
-      this.relationships[typeName] = relationships;
-      this.relationDefinitions[typeName] = relationDefinitions;
-      const relatedTypes = getRelatedTypes(parse(relationships));
-      const missingTypes = difference(relatedTypes, this.discoveredTypes);
-      this.expectedTypes = this.expectedTypes.concat(missingTypes);
-    }
-  }
-
-  generateSchema(): GraphQLSchema {
     const schemas = Object.values(this.remoteSchemas).concat(Object.values(this.relationships));
     const resolvers = buildRelationalResolvers(this.relationDefinitions);
-    this.schema = mergeSchemas({
-      schemas,
-      resolvers,
-    });
+    this.schema = mergeSchemas({ schemas, resolvers });
     this.schema = this.alphabetizeSchema(this.schema);
-    if (this.generateSnapshot) this.recordSnapshot();
+
+    if (this.generateSnapshot) {
+      this.recordSnapshot();
+    }
+
     return this.schema;
   }
 
@@ -235,35 +239,5 @@ export class GraphQLGateway {
     if (this.schema) {
       fs.writeFileSync(this.snapshotPath, printSchema(this.schema));
     }
-  }
-
-  /**
-   * Wait for services expected
-   */
-  start(): Promise<GraphQLSchema> {
-    return new Promise((resolve, reject) => {
-      const maxTries = this.waitTimeout / this.waitInterval;
-      let tries = 0;
-      this.timer = setInterval(() => {
-        tries++;
-        if (tries >= maxTries) {
-          reject(new Error('Timeout'));
-        }
-        const discoveredTypes = Object.keys(this.discoveredTypes);
-        const undiscovered = difference(this.expectedTypes, discoveredTypes);
-        if (discoveredTypes.length === 0) return;
-        if (discoveredTypes.some(type => !this.remoteSchemas[type])) return;
-        if (undiscovered.length > 0) {
-          if (this.broker.logger) {
-            const msg = `Still waiting for ${undiscovered.join(', ')} types to be discovered`;
-            this.broker.logger.warn(msg);
-          }
-          return;
-        }
-        clearInterval(this.timer);
-        this.generateSchema();
-        resolve(this.schema);
-      }, this.waitInterval);
-    });
   }
 }

@@ -75,12 +75,12 @@ export class GraphQLGateway {
   // Keep track on which service registered
 
   logServices = (services: Array<any>): void => {
-    console.log('[moleculer-graphql] Services:', services.map(s => s.name));
+    this.service.logger.info('[moleculer-graphql] Services:', services.map(s => s.name));
   };
 
-  logEvent = (eventName: string) => (func: any) => {
-    console.log('[moleculer-graphql] Event', eventName);
-    return func;
+  logEvent = (eventName: string) => (func: any) => (...args: any[]) => {
+    this.service.logger.info('[moleculer-graphql] Event', eventName);
+    return func(...args);
   };
 
   getGqlServices = (services: Array<any>): Array<any> =>
@@ -92,15 +92,17 @@ export class GraphQLGateway {
     });
 
   addGql = async (services: Array<any>): Promise<void> => {
-    console.log('[moleculer-graphql] Add GQL');
-    this.logServices(this.getGqlServices(services));
+    this.service.logger.info('[moleculer-graphql] Add GQL');
+    const gqlServices = this.getGqlServices(services);
+    this.logServices(gqlServices);
 
-    this.getGqlServices(services).map(service => this.buildRemoteSchema(service));
+    gqlServices.map(service => this.buildRemoteSchema(service));
     this.generateSchema();
   };
 
   removeGql = (services: any): void => {
-    console.log('[moleculer-graphql] Remove GQL');
+    this.service.logger.info('[moleculer-graphql] Remove GQL');
+    const gqlServices = this.getGqlServices(services);
     this.logServices(services);
 
     services.map(service => this.removeRemoteSchema(service));

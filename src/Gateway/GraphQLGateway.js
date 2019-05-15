@@ -190,10 +190,13 @@ export class GraphQLGateway {
 
   buildRemoteSchema(service: ServiceWorker): void {
     const {
-      settings: { typeName, schema, relationships, relationDefinitions },
-    } = service;
+      typeName, //
+      schemaStr,
+      relationships,
+      relationDefinitions,
+    } = service.settings;
 
-    this.remoteSchemas[typeName] = schema;
+    this.remoteSchemas[typeName] = buildSchema(schemaStr);
 
     if (relationships) {
       this.relationships[typeName] = relationships;
@@ -225,6 +228,7 @@ export class GraphQLGateway {
 
     const schemas = Object.values(this.remoteSchemas).concat(Object.values(this.relationships));
     const resolvers = buildRelationalResolvers(this.relationDefinitions);
+
     this.schema = mergeSchemas({ schemas, resolvers });
     this.schema = this.alphabetizeSchema(this.schema);
 

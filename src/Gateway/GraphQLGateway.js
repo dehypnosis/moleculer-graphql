@@ -74,10 +74,6 @@ export class GraphQLGateway {
   snapshotPath: string = `${process.cwd()}/schema.snapshot.graphql`;
   // Keep track on which service registered
 
-  logServices = (services: Array<any>): void => {
-    this.service.logger.info('[moleculer-graphql] Services:', services.map(s => s.name));
-  };
-
   logEvent = (eventName: string) => (func: any) => (...args: any[]) => {
     this.service.logger.info('[moleculer-graphql] Event', eventName);
     return func(...args);
@@ -92,18 +88,16 @@ export class GraphQLGateway {
     });
 
   addGql = async (services: Array<any>): Promise<void> => {
-    this.service.logger.info('[moleculer-graphql] Add GQL');
     const gqlServices = this.getGqlServices(services);
-    this.logServices(gqlServices);
+    this.service.logger.info('[moleculer-graphql] Add GQL. Services:', gqlServices.map(s => s.name));
 
     gqlServices.map(service => this.buildRemoteSchema(service));
     this.generateSchema();
   };
 
   removeGql = (services: any): void => {
-    this.service.logger.info('[moleculer-graphql] Remove GQL');
     const gqlServices = this.getGqlServices(services);
-    this.logServices(services);
+    this.service.logger.info('[moleculer-graphql] Remove GQL. Services:', gqlServices.map(s => s.name));
 
     services.map(service => this.removeRemoteSchema(service));
     this.generateSchema();
@@ -162,6 +156,7 @@ export class GraphQLGateway {
         // * Event "$services.changed" thrown when broker load service
         // * We can't trust in this hook to merge schema
         // '$services.changed': this.handleServiceUpdate,
+        '$broker.started': this.logEvent('$broker.started')(this.scanAllServices),
         '$node.connected': this.logEvent('$node.connected')(this.handleNodeConnection),
         '$node.disconnected': this.logEvent('$node.disconnected')(this.handleNodeDisconnected),
       },
@@ -225,7 +220,8 @@ export class GraphQLGateway {
   generateSchema(): GraphQLSchema | void {
     if (isEmpty(this.remoteSchemas)) {
       console.log('[moleculer-graphql] remoteSchemas: empty');
-      return;
+      this.schema = undefined;
+      return this.schema;
     }
 
     const schemas = Object.values(this.remoteSchemas).concat(Object.values(this.relationships));

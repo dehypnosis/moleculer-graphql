@@ -17,7 +17,7 @@ import type { ServiceBroker, ServiceWorker } from 'moleculer';
 import { printSchema, parse, graphql as execute, buildSchema } from 'graphql';
 
 import { getRelatedTypes } from './utilities';
-import { createRemoteSchema } from './createRemoteSchema';
+import { createRemoteSchema } from './createRemoteSchemaV2';
 import { buildRelationalResolvers } from './buildRelationalResolvers';
 import type { TypeRelationDefinitions } from '../Types/ServiceConfiguration';
 
@@ -193,7 +193,11 @@ export class GraphQLGateway {
       relationDefinitions,
     } = service.settings;
 
-    this.remoteSchemas[typeName] = buildSchema(schemaStr);
+    this.remoteSchemas[typeName] = createRemoteSchema({
+      broker: this.broker,
+      service,
+      schema: buildSchema(schemaStr),
+    });
 
     if (relationships) {
       this.relationships[typeName] = relationships;

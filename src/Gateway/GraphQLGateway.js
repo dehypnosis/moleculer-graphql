@@ -81,7 +81,7 @@ export class GraphQLGateway {
   waitInterval: number = 100;
   // Keep track on which service registered
 
-  getGraphQLServices = (services: Array<any>): Array<any> =>
+  getGqlServices = (services: Array<any>): Array<any> =>
     services.filter(service => {
       const notInBlackList = !this.blacklist.includes(service.name);
       const hasSchema = service.settings.hasGraphQLSchema;
@@ -89,9 +89,22 @@ export class GraphQLGateway {
       return hasSchema && notInBlackList;
     });
 
-  discover = async (services: Array<any>): Promise<void> => {
-    this.getGraphQLServices(services).map(service => this.buildRemoteSchema(service));
+  addGql = async (services: Array<any>): Promise<void> => {
+    this.getGqlServices(services).map(service => this.buildRemoteSchema(service));
     this.generateSchema();
+  };
+
+  removeGql = (services: any): void => {
+    services.map(service => this.removeRemoteSchema(service));
+    this.generateSchema();
+  };
+
+  handleGqlAdded = (service: any): void => {
+    this.addGql([service]);
+  };
+
+  handleGqlRemoved = (service: any): void => {
+    this.removeGql([service]);
   };
 
   handleServiceUpdate = (): Promise<void> => {
@@ -99,7 +112,7 @@ export class GraphQLGateway {
     // * It doesn't means:
     // *   - Service started, here is only created
     // *   - Payload only indicate service is "local" or not
-    return this.broker.call('$node.services').then(this.discover);
+    return this.broker.call('$node.services').then(this.addGql);
   };
 
   handleNodeConnection = ({ node }: Object): Promise<void> => {
@@ -108,7 +121,7 @@ export class GraphQLGateway {
       return Promise.resolve();
     }
 
-    return this.discover(node.services);
+    return this.addGql(node.services);
   };
 
   // When nodes disconnect we scan their services for schemas and remove them
@@ -118,8 +131,7 @@ export class GraphQLGateway {
       return Promise.resolve();
     }
 
-    node.services.forEach(service => this.removeRemoteSchema(service));
-    this.generateSchema();
+    this.removeGql(node.services);
   };
 
   constructor(opts: GatewayOptions) {
@@ -135,8 +147,14 @@ export class GraphQLGateway {
     this.service = this.broker.createService({
       name: '@gateway',
       events: {
-        '$services.changed': this.handleServiceUpdate,
+        '$gql.added': this.handleGqlAdded,
+        '$gql.removed': this.handleGqlRemoved,
+
+        // * Event "$services.changed" thrown when broker load service
+        // * We can't trust in this hook to merge schema
+        // '$services.changed': this.handleServiceUpdate,
         '$node.connected': this.handleNodeConnection,
+        '$node.disconnected': this.handleNodeDisconnected,
         '$node.disconnected': this.handleNodeDisconnected,
       },
       actions: {

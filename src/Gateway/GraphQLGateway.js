@@ -81,32 +81,31 @@ export class GraphQLGateway {
   waitInterval: number = 100;
   // Keep track on which service registered
 
-  discover = async services => {
-    const shouldBuildSchemaServices = services.filter(
-      service => !this.blacklist.includes(service.name) && service.settings.hasGraphQLSchema,
-    );
+  getGraphQLServices = (services: Array<any>): Array<any> =>
+    services.filter(service => {
+      const notInBlackList = !this.blacklist.includes(service.name);
+      const hasSchema = service.settings.hasGraphQLSchema;
 
-    await Promise.all(
-      shouldBuildSchemaServices.map(service => {
-        if (this.onServiceDiscovery) {
-          this.onServiceDiscovery(service);
-        }
+      return hasSchema && notInBlackList;
+    });
 
-        return this.buildRemoteSchema(service).catch(() => {});
-      }),
-    );
-
-    return this.generateSchema();
+  discover = async (services: Array<any>): Promise<void> => {
+    this.getGraphQLServices(services).map(service => this.buildRemoteSchema(service));
+    this.generateSchema();
   };
 
   handleServiceUpdate = (): Promise<void> => {
+    // * In moleculer 0.13.5, event "$services.changed" only means service loaded by broker
+    // * It doesn't means:
+    // *   - Service started, here is only created
+    // *   - Payload only indicate service is "local" or not
     return this.broker.call('$node.services').then(this.discover);
   };
 
-  // When nodes connect we scan their services for schemas and add stitch them in
   handleNodeConnection = ({ node }: Object): Promise<void> => {
     if (!node) {
-      return;
+      console.log('[gateway][handleNodeConnection] node: empty');
+      return Promise.resolve();
     }
 
     return this.discover(node.services);
@@ -114,17 +113,13 @@ export class GraphQLGateway {
 
   // When nodes disconnect we scan their services for schemas and remove them
   handleNodeDisconnected = async ({ node }: Object): Promise<void> => {
-    // TODO: Unclear logic
     if (!node) {
-      return;
+      console.log('[gateway][handleNodeDisconnected] node: empty');
+      return Promise.resolve();
     }
-    const services = node.services.filter(service => this.remoteSchemas[service.settings.typeName]);
-    if (services.length > 0) {
-      for (const service of services) {
-        await this.buildRemoteSchema(service);
-      }
-      this.generateSchema();
-    }
+
+    node.services.forEach(service => this.removeRemoteSchema(service));
+    this.generateSchema();
   };
 
   constructor(opts: GatewayOptions) {
@@ -172,26 +167,37 @@ export class GraphQLGateway {
     return schema;
   }
 
-  async buildRemoteSchema(service: ServiceWorker): Promise<void> {
+  removeRemoteSchema(service: ServiceWorker): void {
     const {
       settings: { typeName, relationships, relationDefinitions },
     } = service;
 
-    // const shouldBuild = !this.remoteSchemas[typeName];
-    const shouldBuild = true;
+    delete this.remoteSchemas[typeName];
 
-    if (shouldBuild) {
-      this.remoteSchemas[typeName] = await createRemoteSchema({
-        broker: this.broker,
-        service,
-      });
-      if (relationships) {
-        this.relationships[typeName] = relationships;
-        this.relationDefinitions[typeName] = relationDefinitions;
-        const relatedTypes = getRelatedTypes(parse(relationships));
-        const missingTypes = difference(relatedTypes, this.discoveredTypes);
-        this.expectedTypes = this.expectedTypes.concat(missingTypes);
-      }
+    if (relationships) {
+      delete this.relationships[typeName];
+      delete this.relationDefinitions[typeName];
+
+      // TODO: Revert expected types. Now we don't use this logic in app
+      const relatedTypes = getRelatedTypes(parse(relationships));
+      const missingTypes = difference(relatedTypes, this.discoveredTypes);
+      this.expectedTypes = this.expectedTypes.concat(missingTypes);
+    }
+  }
+
+  buildRemoteSchema(service: ServiceWorker): void {
+    const {
+      settings: { typeName, schema, relationships, relationDefinitions },
+    } = service;
+
+    this.remoteSchemas[typeName] = schema;
+
+    if (relationships) {
+      this.relationships[typeName] = relationships;
+      this.relationDefinitions[typeName] = relationDefinitions;
+      const relatedTypes = getRelatedTypes(parse(relationships));
+      const missingTypes = difference(relatedTypes, this.discoveredTypes);
+      this.expectedTypes = this.expectedTypes.concat(missingTypes);
     }
   }
 

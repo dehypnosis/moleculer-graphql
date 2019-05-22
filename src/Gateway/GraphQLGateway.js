@@ -8,6 +8,8 @@
  * @flow
  */
 import fs from 'fs';
+import os from 'os';
+import chalk from 'chalk';
 import selectn from 'selectn';
 import isEmpty from 'lodash.isempty';
 import diffBy from 'lodash.differenceby';
@@ -78,7 +80,7 @@ export class GraphQLGateway {
   // Keep track on which service registered
 
   logEvent = (eventName: string) => (func: any) => (...args: any[]) => {
-    this.service.logger.info('[moleculer-graphql] Event', eventName);
+    this.service.logger.info('Event', eventName);
     return func(...args);
   };
 
@@ -92,22 +94,17 @@ export class GraphQLGateway {
 
   addGql = async (services: Array<any>): Promise<void> => {
     const gqlServices = this.getGqlServices(services);
-    this.service.logger.info('[moleculer-graphql] Add GQL. Services:', gqlServices.map(s => s.name));
+    this.service.logger.info('Add GQL. Services:', gqlServices.map(s => s.name));
 
     gqlServices.map(service => this.buildRemoteSchema(service));
     this.generateSchema();
   };
 
   removeGql = async (services: any): Promise<void> => {
-    const currServices = await this.broker.call('$node.services');
     const gqlServices = this.getGqlServices(services);
-    const currGqlServices = this.getGqlServices(currServices);
-    this.service.logger.info('[moleculer-graphql] Remove GQL. Services:', gqlServices.map(s => s.name));
-
-    //
-    const beRmServices = diffBy(services, currGqlServices, service => service.name);
-    beRmServices.map(service => this.removeRemoteSchema(service));
-
+    this.service.logger.info('Remove GQL.');
+    this.service.logger.info('Checking services before remove:', gqlServices.map(s => s.name));
+    gqlServices.map(service => this.removeRemoteSchema(service));
     this.generateSchema();
   };
 
@@ -181,35 +178,44 @@ export class GraphQLGateway {
   }
 
   removeRemoteSchema(service: ServiceWorker): void {
-    const {
-      settings: { typeName, schemaCreatedAt },
-    } = service;
-
+    const typeName = service.name;
+    const { schemaCreatedAt } = service.settings;
     const currRemoteSchema = this.remoteSchemas[typeName];
-    const outOfDate = currRemoteSchema.schemaCreatedAt < schemaCreatedAt;
 
-    if (outOfDate) {
-      delete this.remoteSchemas[typeName];
+    if (currRemoteSchema) {
+      const currSchemaCreatedAt = currRemoteSchema.schemaCreatedAt;
+      const outOfDate = currSchemaCreatedAt <= schemaCreatedAt;
+
+      if (outOfDate) {
+        this.service.logger.info('Remove remote schema:', chalk.green(typeName));
+        this.service.logger.info('Reason:', chalk.green('Out of date'));
+        this.service.logger.info('Time compare:');
+        this.service.logger.info('  - new:', chalk.green(currSchemaCreatedAt));
+        this.service.logger.info('  - old:', chalk.green(schemaCreatedAt));
+        delete this.remoteSchemas[typeName];
+        return;
+      }
+
+      this.service.logger.info('Keep remote schema:', chalk.green(typeName));
+      this.service.logger.info('Reason:', chalk.green('Update to date'));
+
+      return;
     }
+
+    this.service.logger.info('Skip remote schema:', typeName);
+    this.service.logger.info('Reason:', "Don't have schema in Gateway");
   }
 
   buildRemoteSchema(service: ServiceWorker): void {
-    const {
-      typeName, //
-      schemaStr,
-      relationships,
-      schemaCreatedAt,
-      relationDefinitions,
-    } = service.settings;
+    const { schemaStr, relationships, schemaCreatedAt, relationDefinitions } = service.settings;
+    const typeName = service.name;
 
-    const remoteSchema = createRemoteSchema({
+    this.remoteSchemas[typeName] = createRemoteSchema({
       service,
       schemaCreatedAt,
       broker: this.broker,
       schema: buildSchema(schemaStr),
     });
-
-    this.remoteSchemas[typeName] = remoteSchema;
   }
 
   alphabetizeSchema(schema: GraphQLSchema): GraphQLSchema {
@@ -230,7 +236,7 @@ export class GraphQLGateway {
 
   generateSchema(): GraphQLSchema | void {
     if (isEmpty(this.remoteSchemas)) {
-      console.log('[moleculer-graphql] remoteSchemas: empty');
+      console.log('remoteSchemas: empty');
       this.schema = undefined;
       return this.schema;
     }

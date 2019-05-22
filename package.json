@@ -13,6 +13,7 @@
   "main": "lib/index.js",
   "dependencies": {
     "apollo-link": "^0.7.0",
+    "chalk": "^2.4.2",
     "graphql-tools": "^4.0.4",
     "lodash": "^4.17.4",
     "lodash.difference": "^4.5.0",

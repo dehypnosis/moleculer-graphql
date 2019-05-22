@@ -10,17 +10,20 @@
 import fs from 'fs';
 import selectn from 'selectn';
 import isEmpty from 'lodash.isempty';
+import diffBy from 'lodash.differenceby';
 import difference from 'lodash.difference';
 import { mergeSchemas } from 'graphql-tools';
 import type { GraphQLSchema, DocumentNode } from 'graphql';
 import type { ServiceBroker, ServiceWorker } from 'moleculer';
 import { printSchema, parse, graphql as execute, buildSchema } from 'graphql';
 
+/* Import from source-code */
 import { getRelatedTypes } from './utilities';
 import { createRemoteSchema } from './createRemoteSchemaV2';
 import { buildRelationalResolvers } from './buildRelationalResolvers';
 import type { TypeRelationDefinitions } from '../Types/ServiceConfiguration';
 
+import type { ExtendGqlSchema } from './createRemoteSchemaV2';
 opaque type ServiceName = string;
 
 type GatewayOptions = {
@@ -33,7 +36,7 @@ type GatewayOptions = {
 };
 
 type RemoteSchemaMap = {
-  [TypeName: string]: GraphQLSchema,
+  [TypeName: string]: ExtendGqlSchema,
 };
 
 type RelationshipSchemas = {
@@ -82,7 +85,7 @@ export class GraphQLGateway {
   getGqlServices = (services: Array<any>): Array<any> =>
     services.filter(service => {
       const notInBlackList = !this.blacklist.includes(service.name);
-      const hasSchema = service.settings.hasGraphQLSchema;
+      const hasSchema = service.settings.schemaStr;
 
       return hasSchema && notInBlackList;
     });
@@ -95,11 +98,16 @@ export class GraphQLGateway {
     this.generateSchema();
   };
 
-  removeGql = (services: any): void => {
+  removeGql = async (services: any): Promise<void> => {
+    const currServices = await this.broker.call('$node.services');
     const gqlServices = this.getGqlServices(services);
+    const currGqlServices = this.getGqlServices(currServices);
     this.service.logger.info('[moleculer-graphql] Remove GQL. Services:', gqlServices.map(s => s.name));
 
-    services.map(service => this.removeRemoteSchema(service));
+    //
+    const beRmServices = diffBy(services, currGqlServices, service => service.name);
+    beRmServices.map(service => this.removeRemoteSchema(service));
+
     this.generateSchema();
   };
 
@@ -174,14 +182,14 @@ export class GraphQLGateway {
 
   removeRemoteSchema(service: ServiceWorker): void {
     const {
-      settings: { typeName, relationships, relationDefinitions },
+      settings: { typeName, schemaCreatedAt },
     } = service;
 
-    delete this.remoteSchemas[typeName];
+    const currRemoteSchema = this.remoteSchemas[typeName];
+    const outOfDate = currRemoteSchema.schemaCreatedAt < schemaCreatedAt;
 
-    if (relationships) {
-      delete this.relationships[typeName];
-      delete this.relationDefinitions[typeName];
+    if (outOfDate) {
+      delete this.remoteSchemas[typeName];
     }
   }
 
@@ -190,19 +198,18 @@ export class GraphQLGateway {
       typeName, //
       schemaStr,
       relationships,
+      schemaCreatedAt,
       relationDefinitions,
     } = service.settings;
 
-    this.remoteSchemas[typeName] = createRemoteSchema({
-      broker: this.broker,
+    const remoteSchema = createRemoteSchema({
       service,
+      schemaCreatedAt,
+      broker: this.broker,
       schema: buildSchema(schemaStr),
     });
 
-    if (relationships) {
-      this.relationships[typeName] = relationships;
-      this.relationDefinitions[typeName] = relationDefinitions;
-    }
+    this.remoteSchemas[typeName] = remoteSchema;
   }
 
   alphabetizeSchema(schema: GraphQLSchema): GraphQLSchema {

@@ -9,12 +9,19 @@ import { introspectSchema, makeRemoteExecutableSchema } from 'graphql-tools';
 import { MoleculerLink } from './MoleculerLink';
 
 type RemoteSchemaOptions = {
-  broker: ServiceBroker,
   service: Service,
+  broker: ServiceBroker,
   schema: GraphQLSchema,
+  schemaCreatedAt: Number,
 };
 
-export function createRemoteSchema({ broker, service, schema }: RemoteSchemaOptions) {
+export type ExtendGqlSchema = GraphQLSchema & {
+  schemaCreatedAt: Number,
+};
+
+export function createRemoteSchema({ broker, service, schema, schemaCreatedAt }: RemoteSchemaOptions): ExtendGqlSchema {
   const link = new MoleculerLink({ broker, service: service.name });
-  return makeRemoteExecutableSchema({ schema, link });
+  const remoteSchema = makeRemoteExecutableSchema({ schema, link });
+  remoteSchema.schemaCreatedAt = schemaCreatedAt;
+  return remoteSchema;
 }

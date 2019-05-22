@@ -197,7 +197,7 @@ export class GraphQLGateway {
       }
 
       this.service.logger.info('Keep remote schema:', chalk.green(typeName));
-      this.service.logger.info('Reason:', chalk.green('Update to date'));
+      this.service.logger.info('Reason:', chalk.green('Up to date'));
 
       return;
     }

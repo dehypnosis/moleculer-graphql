@@ -104,6 +104,7 @@ export class GraphQLGateway {
     const gqlServices = this.getGqlServices(services);
     this.service.logger.info('Remove GQL.');
     this.service.logger.info('Checking services before remove:', gqlServices.map(s => s.name));
+
     gqlServices.map(service => this.removeRemoteSchema(service));
     this.generateSchema();
   };
@@ -130,7 +131,7 @@ export class GraphQLGateway {
 
   handleNodeConnection = ({ node }: Object): Promise<void> => {
     if (!node) {
-      console.log('[moleculer-graphql][handleNodeConnection] node: empty');
+      console.log('[handleNodeConnection] node: empty');
       return Promise.resolve();
     }
 
@@ -139,7 +140,7 @@ export class GraphQLGateway {
 
   handleNodeDisconnected = async ({ node }: Object): Promise<void> => {
     if (!node) {
-      console.log('[moleculer-graphql][handleNodeDisconnected] node: empty');
+      console.log('[handleNodeDisconnected] node: empty');
       return Promise.resolve();
     }
 
@@ -202,13 +203,13 @@ export class GraphQLGateway {
       return;
     }
 
-    this.service.logger.info('Skip remote schema:', typeName);
-    this.service.logger.info('Reason:', "Don't have schema in Gateway");
+    this.service.logger.info('Skip remote schema:', chalk.green(typeName));
+    this.service.logger.info('Reason:', chalk.green("Don't have schema in Gateway"));
   }
 
   buildRemoteSchema(service: ServiceWorker): void {
-    const { schemaStr, relationships, schemaCreatedAt, relationDefinitions } = service.settings;
     const typeName = service.name;
+    const { schemaStr, schemaCreatedAt } = service.settings;
 
     this.remoteSchemas[typeName] = createRemoteSchema({
       service,
